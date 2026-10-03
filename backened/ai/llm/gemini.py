@@ -29,15 +29,14 @@ MAX_MODEL_ATTEMPTS = 2
 
 class GeminiLLM(LLM):
     """
-    Shared Gemini client used across all AI agents.
+    Shared Gemini client with Multi-API-Key Rotation and Fallback Models.
 
     Features
     --------
-    - Uses Gemini Chat API.
-    - Primary model + multiple fallback models.
-    - Automatic retry for temporary Gemini failures.
-    - Handles 429 quota errors using Gemini RetryInfo delay.
-    - Handles 503 unavailable errors with exponential backoff.
+    - Multi-Key Pool: Distributes load across multiple GOOGLE_API_KEYS (comma-separated).
+    - 429 Quota Failover: Instantly switches to the next available API key if rate-limited.
+    - Model Fallbacks: Tries primary model then fallback models.
+    - Dynamic retry and exponential backoff for transient failures.
     """
 
     def __init__(
@@ -48,19 +47,32 @@ class GeminiLLM(LLM):
         fallback_models: list[str] | None = None,
         sleep=time.sleep,
     ):
-        api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        self.client = client or (genai.Client(api_key=api_key) if api_key else None)
         self.sleep = sleep
+
+        # -------------------------------------------------------
+        # Multi-Key Pool Setup
+        # Supports comma-separated keys in GOOGLE_API_KEYS or GOOGLE_API_KEY
+        # -------------------------------------------------------
+        raw_keys = api_key or os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
+        self.api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+
+        if client is not None:
+            self.clients = [client]
+        elif self.api_keys:
+            self.clients = [genai.Client(api_key=k) for k in self.api_keys]
+        else:
+            self.clients = []
+
+        self._key_index = 0
 
         # -------------------------------------------------------
         # Model Configuration (Best → Weakest)
         # -------------------------------------------------------
-
         self.primary_model = primary_model or os.getenv(
-            "GEMINI_MODEL", "gemini-3.5-flash"
+            "GEMINI_MODEL", "gemini-2.0-flash"
         )
         configured_fallbacks = os.getenv(
-            "GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-2.5-flash-lite"
+            "GEMINI_FALLBACK_MODELS", "gemini-1.5-flash,gemini-2.0-flash-lite"
         )
         self.fallback_models = fallback_models or [
             model.strip()
@@ -69,23 +81,39 @@ class GeminiLLM(LLM):
         ]
 
         logger.info(
-            "Primary Gemini model: %s | Fallback models: %s",
+            "GeminiLLM initialized with %d API key(s) | Primary: %s | Fallbacks: %s",
+            len(self.clients),
             self.primary_model,
             ", ".join(self.fallback_models),
         )
+
+    @property
+    def client(self):
+        if not self.clients:
+            return None
+        return self.clients[self._key_index % len(self.clients)]
+
+    def _rotate_key(self):
+        """Rotate to the next API key in the pool."""
+        if len(self.clients) > 1:
+            self._key_index = (self._key_index + 1) % len(self.clients)
+            logger.info(
+                "Switched to Gemini API key %d of %d.",
+                (self._key_index % len(self.clients)) + 1,
+                len(self.clients),
+            )
 
     # =======================================================
     # Internal Chat API Call
     # =======================================================
 
     def _chat_generate(self, model: str, prompt: str) -> str:
-        """Send prompt using Gemini Chat API."""
-
-        if self.client is None:
+        """Send prompt using current active Gemini client."""
+        active_client = self.client
+        if active_client is None:
             raise RuntimeError("GOOGLE_API_KEY is not configured.")
 
-        chat = self.client.chats.create(model=model)
-
+        chat = active_client.chats.create(model=model)
         response = chat.send_message(prompt)
 
         if not response.text:
@@ -94,31 +122,57 @@ class GeminiLLM(LLM):
         return response.text.strip()
 
     # =======================================================
-    # Retry Wrapper
+    # Retry Wrapper with Multi-Key Failover
     # =======================================================
 
     def _generate_with_retry(self, model: str, prompt: str) -> str:
         last_error = None
 
-        for attempt in range(1, MAX_MODEL_ATTEMPTS + 1):
+        # Number of attempts scales with available API keys
+        total_attempts = max(MAX_MODEL_ATTEMPTS, len(self.clients))
+
+        for attempt in range(1, total_attempts + 1):
             try:
                 logger.info(
-                    "Using Gemini model: %s (Attempt %d/%d)",
+                    "Using Gemini model %s [Key %d/%d, Attempt %d/%d]",
                     model,
+                    (self._key_index % len(self.clients)) + 1,
+                    len(self.clients),
                     attempt,
-                    MAX_MODEL_ATTEMPTS,
+                    total_attempts,
                 )
-                return self._chat_generate(model=model, prompt=prompt)
+                result = self._chat_generate(model=model, prompt=prompt)
+                # Rotate key after every successful call to distribute RPM evenly across keys
+                self._rotate_key()
+                return result
+
             except Exception as error:
                 last_error = error
                 status_code = get_status_code(error)
 
-                if status_code in {400, 401, 403}:
-                    raise RuntimeError(
-                        "Gemini rejected the request; check API access and request configuration."
-                    ) from error
+                # Invalid key or unauthorized
+                if status_code in {401, 403}:
+                    if len(self.clients) > 1:
+                        logger.warning("Key returned %s; rotating to next key immediately.", status_code)
+                        self._rotate_key()
+                        continue
+                    raise RuntimeError("Gemini API key rejected; check API credentials.") from error
 
-                if not is_retryable_error(error) or attempt == MAX_MODEL_ATTEMPTS:
+                if status_code == 400:
+                    raise RuntimeError("Gemini rejected request structure.") from error
+
+                # 429 Quota / Rate Limit: Immediately rotate to next key if available
+                if status_code == 429 or is_retryable_error(error):
+                    if len(self.clients) > 1:
+                        logger.warning(
+                            "Gemini rate limit or error encountered (%s). Rotating key...",
+                            error,
+                        )
+                        self._rotate_key()
+                        self.sleep(0.5)
+                        continue
+
+                if not is_retryable_error(error) or attempt == total_attempts:
                     logger.warning(
                         "Gemini model %s failed on attempt %d: %s",
                         model,
@@ -129,8 +183,7 @@ class GeminiLLM(LLM):
 
                 delay = retry_delay(error, attempt)
                 logger.warning(
-                    "Gemini model %s had a temporary failure; retrying in %.2fs.",
-                    model,
+                    "Gemini temporary failure; retrying in %.2fs...",
                     delay,
                 )
                 self.sleep(delay)
