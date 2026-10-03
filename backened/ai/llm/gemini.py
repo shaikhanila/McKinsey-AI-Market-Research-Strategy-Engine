@@ -79,10 +79,10 @@ class GeminiLLM(LLM):
         # Model Configuration (Best → Weakest)
         # -------------------------------------------------------
         self.primary_model = primary_model or os.getenv(
-            "GEMINI_MODEL", "gemini-2.0-flash"
+            "GEMINI_MODEL", "gemini-3.8-flash"
         )
         configured_fallbacks = os.getenv(
-            "GEMINI_FALLBACK_MODELS", "gemini-1.5-flash,gemini-2.0-flash-lite"
+            "GEMINI_FALLBACK_MODELS", "gemini-2.5-flash,gemini-flash-latest"
         )
         self.fallback_models = fallback_models or [
             model.strip()

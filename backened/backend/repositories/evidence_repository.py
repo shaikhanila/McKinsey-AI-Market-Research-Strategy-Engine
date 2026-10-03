@@ -37,13 +37,16 @@ class EvidenceRepository:
         self,
         job_id: str,
     ) -> list[dict]:
-
-        response = (
-            supabase
-            .table("evidence")
-            .select("*")
-            .eq("job_id", job_id)
-            .execute()
-        )
-
-        return response.data or []
+        for attempt in range(2):
+            try:
+                response = (
+                    supabase
+                    .table("evidence")
+                    .select("*")
+                    .eq("job_id", job_id)
+                    .execute()
+                )
+                return response.data or []
+            except Exception:
+                if attempt == 1:
+                    raise
