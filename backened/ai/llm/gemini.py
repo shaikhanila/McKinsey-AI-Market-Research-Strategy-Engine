@@ -59,7 +59,7 @@ class GeminiLLM(LLM):
             if k.strip():
                 keys_pool.append(k.strip())
 
-        for i in range(1, 10):
+        for i in range(1, 51):
             extra_key = os.getenv(f"GOOGLE_API_KEY_{i}")
             if extra_key and extra_key.strip() and extra_key.strip() not in keys_pool:
                 keys_pool.append(extra_key.strip())
