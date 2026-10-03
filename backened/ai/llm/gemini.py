@@ -51,10 +51,20 @@ class GeminiLLM(LLM):
 
         # -------------------------------------------------------
         # Multi-Key Pool Setup
-        # Supports comma-separated keys in GOOGLE_API_KEYS or GOOGLE_API_KEY
+        # Supports comma-separated keys or separate GOOGLE_API_KEY_1, GOOGLE_API_KEY_2, etc.
         # -------------------------------------------------------
+        keys_pool = []
         raw_keys = api_key or os.getenv("GOOGLE_API_KEYS") or os.getenv("GOOGLE_API_KEY") or ""
-        self.api_keys = [k.strip() for k in raw_keys.split(",") if k.strip()]
+        for k in raw_keys.split(","):
+            if k.strip():
+                keys_pool.append(k.strip())
+
+        for i in range(1, 10):
+            extra_key = os.getenv(f"GOOGLE_API_KEY_{i}")
+            if extra_key and extra_key.strip() and extra_key.strip() not in keys_pool:
+                keys_pool.append(extra_key.strip())
+
+        self.api_keys = keys_pool
 
         if client is not None:
             self.clients = [client]
