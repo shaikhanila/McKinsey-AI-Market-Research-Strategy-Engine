@@ -11,6 +11,10 @@
 ![Build](https://img.shields.io/badge/Build-Vite-646CFF)
 ![Language](https://img.shields.io/badge/Language-Python%20%7C%20JavaScript-yellow)
 
+## Live App
+
+- Open the application: [McKinsey AI Market Research Strategy App](https://mc-kinsey-ai-market-research-strate.vercel.app/login)
+
 ---
 
 ## 1. Project Overview
@@ -1597,14 +1601,33 @@ Supabase
 
 ---
 
-# 41. Team
+# 41. Team & Contribution Breakdown
 
-The original repository README lists the project authors as:
+**Author:** **Shaikh Anila**
 
-- **Shaikh Anila**
-- **Mayuri Laddha**
-- **Jignesh Kumar**
-- **Swapnil Pathare**
+### Detailed Role & Contribution Breakdown
+
+- **Frontend & UX/UI (React/Next.js) — Shivam Tyagi**
+  - Designed the user experience, executive dashboard layout, interactive citation popover components, and responsive workflow screens.
+
+- **Authentication & API Communication — Shaikh Anila**
+  - Implemented Supabase JWT authentication flow, token management, secure HTTP headers, and API client orchestration.
+
+- **Backend & API Layer — Mayuri Laddha**
+  - Engineered FastAPI REST endpoints, request/response Pydantic models, routing controllers, and system exception handling.
+
+- **AI Agents 1–3: Planning, Research & Extraction**
+  - **Planning (Agent 1): Shivam Tyagi** — Business brief decomposition into focused research sub-tasks.
+  - **Research & Extraction (Agents 2–3): Shaikh Anila** — Live Tavily web scraping, domain classification, URL deduplication, and verbatim evidence extraction.
+
+- **AI Agents 4–5: Validation & Citation — Archana Singh (Support: Mayuri Laddha)**
+  - Fact-checking claims against source excerpts, scoring credibility and recency, flagging conflicts, and building canonical citation indices.
+
+- **AI Agents 6–7: Report & Linker — Jignesh**
+  - Synthesizing verified evidence into structured McKinsey-style briefing reports and programmatically linking claim citations to primary web sources.
+
+- **Database & Persistence — Swapnil**
+  - Relational database tables (research_jobs, sources, evidence, validations, reports), repository data access layer, transactional integrity, and closing persistence statements.
 
 ---
 
