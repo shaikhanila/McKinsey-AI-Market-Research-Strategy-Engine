@@ -1601,7 +1601,7 @@ Supabase
 
 The original repository README lists the project authors as:
 
-- **Shivam Tyagi**
+- **Shaikh Anila**
 - **Mayuri Laddha**
 - **Jignesh Kumar**
 - **Swapnil Pathare**
