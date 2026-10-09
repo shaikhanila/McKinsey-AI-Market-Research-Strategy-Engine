@@ -14,6 +14,7 @@
 ## Live App
 
 - Open the application: [McKinsey AI Market Research Strategy App](https://mc-kinsey-ai-market-research-strate.vercel.app/login)
+- Demo assets: [Project Demo Drive Folder](https://drive.google.com/drive/folders/175t3RGscWI5AqeGNBWEnWmkFRRUp1LB0?usp=drive_link)
 
 ---
 
